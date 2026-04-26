@@ -1,150 +1,39 @@
 # Project 2
 
-> ⚠️ This document is fairly technical to maintain brevity, if you have **any** questions ask your recruiter or come visit us at floor -2 of Povo 2.
+> This document explains clearly (hopefully) my version of the project_2 of Telemetry Recruitment for E-Agle TRT ASD.
 
-## Abstract
+## Setup 
 
-Build the most basic and crucial part of a telemetry software: logging every information received.
+This project was setup using the instruction from the projects readme.
 
-The functions in **fake_receiver.h** will simulate an interface to CAN bus (protocol used in automotive to share data between ECUs). The data received must be parsed and then eventually logged.
+### Github
 
-You will implement a basic [Finite State Machine](#finite-state-machine) with Idle and Run states, both in Idle and Run you will receive data from "CAN" and [Parse](#parsing) them. Two specific messages will trigger a state transition. The telemetry will log the data only in Run state. Then, with the parsed messages, compute some basic [statistics](#statistics).  
-To receive messages, you will need to use a multithread approach, this means that you will need to start a thread.
-The thread will only receive data using the function *can_receive* (defined in *fake_receiver.h*). When implementing the second thread, take into consideration data race, and be careful to avoid two thread accessing the same memory location simultaneously.  
-The received data has to be processed in the main thread.  
-The second thread must be implemented in a separate file from main.cc .
+The github repository was setup by initially making a branch 'dev' where all the project would be saved at before it going to the master bracnh, after that an issue was made for each important part of the projects to ensure its completion by doing small steps and having a better history of the project, for each issue a branch was made in order to resolve them in their respective on. After each issue got resolved a PR was created and if it was all OK a the branch would get merged into 'dev'.
 
-So the requirements are:
+## Project Architecture & File Structure
 
-- [Finite State Machine](#finite-state-machine)
-- [Logging](#logged-file)
-- [Parse](#parsing)
-- [statistics](#statistics)
+### 'main.cpp'
 
-**_Message example_**
+The entry point of the application. It implements the core Finite State Machine (FSM) to manage the telemetry session lifecycle (IDLE and RUN states). It handles real-time file I/O for raw logging and coordinates the statistical data aggregation.
 
-```CAN
-0A0#6601
-```
+### 'can_handler.cpp' & c'an_handler.h'
 
-### Finite State Machine
+Encapsulates the multithreaded receiver logic. It manages a dedicated background thread that continuously polls the simulated CAN interface. It utilizes a 'mutex' and a 'condition_variable' to implement a thread-safe producer-consumer pattern, preventing data races when passing messages to the main thread.
 
-Use a state machine architecture to separate the functionalities in Idle and Run state.
+### 'parser.cpp' & 'parser.h'
 
-#### Idle
+Provides the payload decoding logic. It parses the raw CAN strings (e.g., '<ID>#<PAYLOAD>') and converts the hexadecimal characters into a structured ParsedMessage struct, separating the 12-bit ID from the data bytes.
 
-Receive messages and parse them, when you receive the start message transition to Run state. This defines that a new session is started.
+## Core Functions
 
-#### Run
+### 'start_condition_met' & 'stop_condition_met'
 
-Receive and parse messages, save the raw messages in a file (each new session must have a different file). If you receive the stop message, then close the file and transition back to Idle.
+Boolean helper functions that evaluate incoming parsed messages. They trigger the FSM state transitions by checking for specific hexadecimal IDs and payload sequences
 
-#### Extra states
+### 'update_stat'
 
-If you want you can add some extra states. Is not required.
+Updates a map tracking structure during the RUN state. It continuously increments the message counter for each unique CAN ID received in the current session.
 
-### Logged file
+### 'save_csv'
 
-The output file will have a line for each message received prepended with the timestamp at wich the message was received.
-
-```CAN
-// received message
-0A0#6601
-
-// logged message
-(unix_timestamp) 0A0#6601
-```
-
-Each session must have a unique filename.
-
-### Start and Stop messages
-
-```CAN
-// Start
-0A0#6601
-0A0#FF01
-
-// Stop
-0A0#66FF
-```
-
-The start messages will be two, if one of them is received then transition to Run. If you are already in run, then do nothing.
-
-### Parsing
-
-You need to parse the received messages. **Don't** simply match string by string.
-
-Message description:
-
-```CAN
-0A0#6601
-```
-
-The message is composed by ID and payload.
-The string received is formatted as **_\<ID>#\<PAYLOAD>_**.
-
-#### ID
-
-In the example is **_0A0_**, it is expressed in hexadecimal, so it represent 160 in decimal base. This field is at most 12 bits, use a uin16_t to represent it.
-
-#### Payload
-
-It is composed by at most 8 bytes, each composed by 2 chars in hexadecimal. So in the example there are only 2 bytes:
-
-```CAN
-// first example
-6601
-
-66 -> first byte  -> 102 in decimal
-01 -> second byte -> 1 in decimal
-
-// second example
-90291
-this is a nonvalid payload as the number of chars is not even.
-```
-
-### Statistics
-
-For each message ID, compute the statistics of the elapsed time beween messages of the same ID.
-
-Compute the mean time (in milliseconds) between each message. Note that message frequencies are different for each ID. Each time the FSM transitions to Stop, your script must save a [CSV](https://it.wikipedia.org/wiki/Comma-separated_values) containing the computed values (in number):
-
-|ID|number_of_messages|mean_time|
-|-:|-:|-:|
-|0A0|1|100|
-|181|100|0.01|
-
-## Getting started
-
-### Prerequisites
-
-- `git` and a [GitHub](https://github.com) account
-- C/C++ toolchain, with CMake
-
-For Debian / Ubuntu you can use:
-
-```bash
-sudo apt install build-essential cmake
-```
-
-### Setup
-
-- Download the project files [here](https://download-directory.github.io/?url=https%3A%2F%2Fgithub.com%2Feagletrt%2Frecruiting-sw%2Ftree%2Fmaster%2Ftelemetry%2Fproject_2)
-- Create a new GitHub repository and upload the project files via git
-- Start working on the task, creating git commits as you make progress
-- When it's time to deliver, please send your recruiter a link to your github repository
-
-### Building
-
-The project contains a CMakeLists.txt with a basic setup to build the project.
-
-The first time building the project:
-
-```bash
-mkdir -p build
-cd build
-cmake ..
-make -j$(nproc)
-```
-
-This will build the executable that will be located in `./bin` directory.
+Triggered upon transitioning to the STOP state. It calculates the mean time interval (in milliseconds) between messages for each tracked ID. It then exports these stats to a formatted .csv file with hexadecimal IDs to be able to see the data from such fiel.
