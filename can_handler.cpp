@@ -51,7 +51,7 @@ void CanHandler::receiveLoop() {
         int bytes_read = can_receive(buffer);
 
         if (bytes_read > 0){
-            string msg(buffer);
+            string msg(buffer, bytes_read);
             // cout << "Received CAN message: " << msg << endl;
             lock_guard<mutex> lock(m_mutex);   // Lock the mutex to safely access the message queue
             m_messageQueue.push(msg); // Add the received message to the queue
